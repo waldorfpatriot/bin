@@ -1,0 +1,92 @@
+#!/bin/bash
+
+input=$(find . -name "*_ep7.aax" -or -name "*_ep6.aax" -maxdepth 1)
+subfolder=""
+file_destination=""
+destination="${PWD}"
+overwrite="-n"
+keepInput="rm '$f'"
+
+usage()
+{
+	echo "Script to remove Audible DRM from .aax-files. It looks for files ending with _ep6.aax or _ep7.aax in the current directory. Reads theyr title and artist from the metadata, creates a subdirectory called like the artist and uses ffmpeg to copy the undrmed file in their, with the name scheme: title.m4b.
+	
+	aax2m4b --activation_bytes [--destination --input --subfolder]
+	
+	options: 
+	-a or --activation_bytes 	define the activation_bytes for the files. see activation_bytes to learn more. 
+	-d or --destination 		change the output folder from the current working directory to something different
+	-i or --input 				change the input from $(find . -name '*_ep7.aax' -or -name '*_ep6.aax' -maxdepth 1) to something different
+	-s or --subfolder 			ignore the name of the artist and define your own subfolder
+	-o or --overwriteOutput		overwrite if the output file allready exsists
+	-k or --keepInput			keep Input even if success
+	
+	# activation_bytes
+	there is a script called audible-activation.py, it asks for username and password for your audible account, and uses the Chrome or Firefox browser to log in and perform some magic. In the end you get the activation_bytes in the command line. https://github.com/inAudible-NG/audible-activator
+	
+	# examples
+	
+	## convert all files, ending with _ep6.aax or _ep7.aax to m4b and put them in artist subfolders
+	aax2m4b -a 'activation_bytes 8digets'
+	
+	## convert a specific file
+	aax2m4b -i myFile.aax -a 'activation_bytes 8digets'
+	"
+}
+
+## comming soon: a way to safe your activation_bytes in ~/Library and the option --user 'username' to use them
+	
+
+while [ "$1" != "" ]; do
+    case $1 in
+        -d | --destination )    shift
+                                destination=$1
+                                ;;
+        -i | --input )	   		shift
+        						input=$1
+                                ;;
+        -a | --activation_bytes ) shift
+        						activation_bytes=$1
+        						;;
+        -s | --subfolder )		shift
+        						subfolder=$1
+        						;;                  
+        -h | --help )           usage
+                                exit
+                                ;;
+        -o | --overwriteOutput ) overwrite="-y"
+        						;;
+        -k | --keepInput ) 		keepInput="echo 'successfull export, $f still there'"
+        						;;
+        * )                     usage
+                                exit 1
+    esac
+    shift
+done
+
+for f in "$input"
+	do 
+		#extract the title of the file from the metadata
+		t=$(ffprobe -loglevel error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$f")
+		echo "title: $t"
+	
+		if [ "$subfolder" == "" ]; then
+			#extract the artist of the file from the metadata
+			a=$(ffprobe -loglevel error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$f") 
+					echo "artist = $a"
+			file_destination="$destination/$a"
+		else 
+			file_destination="$destination/$subfolder"
+		fi
+		
+		echo "file_destination: $file_destination"
+		
+		#create a subdirectory with the name of the artist or the subfolder
+		mkdir "$file_destination"	
+		
+		echo "folder created, starting ffmpeg for file: $f, saving at: $file_destination/$t.m4b"
+			
+		#convert the drm file to m4b and save it under its metadata title in the created sub dir
+		ffmpeg -activation_bytes $activation_bytes -i "$f" $overwrite -c copy "$file_destination/$t.m4b" && $keepInput	
+	done
+	exit 0
